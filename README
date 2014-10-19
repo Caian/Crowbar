@@ -1,0 +1,76 @@
+Crowbar is a tool for transforming C source code. It randomly creates multiple copies of methods inside a given source file and randomly redirects the calls from the original method to the copies.
+
+INSTALLATION:
+
+A binary is provided in crowbar/bin directory so hopefully you will not need to build it your own.
+
+This tool was built using the svn version of LLVM/Clang 3.5.0. To properly compile the tool copy this directory to "llvm/tools/clang/tools/extra" and add an the line:
+
+add_subdirectory(crowbar)
+
+To the CMakeLists.txt file in "llvm/tools/clang/tools/extra". Keep in mind that the LLVM guys are likely to move headers around and change the LLVM code in a way that may break the compilation of the tool, so a little effort may be required to put Crowbar running again.
+
+USAGE:
+
+The following set of options are available for Crowbar:
+
+  -knr                   - Enable K&R header fix for methods
+  -max-redirect=<string> - Maximum number of calls per method to be redirected (absolute or %)
+  -max-repeat=<int>      - Maximum number of repetitions for selected methods
+  -max-select=<string>   - Maximum number of methods to be repeated (absolute or %)
+  -reseed=<int>          - Seed used to select call redirections
+  -srseed=<int>          - Seed used to select method repetitions
+
+  -help                  - Display available options (-help-hidden for more)
+  -help-list             - Display list of available options (-help-list-hidden for more)
+  -version               - Display the version of this program
+
+K&R stands for Kernighan and Ritchie notation for writing method declarations and it was deprecated when the ANSI-C specification came out, unfortunately it is still supported and used by a lot of legacy code and it brings problems to Crowbar, that's why there is an option to convert K&R notation to ANSI code, but keep in mind that it is not fully tested and, although unlikely, it may break non-K&R code, that's why it is optional.
+
+After the K&R transformation, the Crowbar processes code in 4 phases:
+
+1. Method listing
+2. Method replication
+3. Call listing
+4. Call redirection
+5. Final syntactical checking
+
+Keep in mind that it is possible to repeat methods without redirecting the calls (and thus generating dead code) but it is not possible to redirect calls without repeating methods. So setting either -max-select or -max-repeat to zero will skip the hole process until step 5 (1, 2, 3 and 4). Since step 5 is always performed, this allows you to check whether a source is syntactically correct without altering it.
+
+Now a clarification about what repetition means. It is not a multiplicative factor where the existent method already counts as 1, it is and additive factor. If you have a method it does not count as a repetition, meaning that repeating the method 1 time will make 1 copy of the method.
+
+Crowbar transforms code randomly, so all options are specified in terms of the maximum number of times you want something to happen. To control the randomness it takes 2 seeds as inputs (default is 0 for both): one for controlling the number of methods selected and repeated (-srseed) and one for controlling the number of calls selected to be redirected (-reseed).
+
+Instead of specifying the absolute number of methods or calls to be transformed, one may also want to use percentages. The percentage is applied over the total number of methods in the UNTRANSFORMED source for the -max-select and over the total number of calls OF EACH METHOD AFTER THE METHOD REPETITION for -max-redirect, meaning that if you have:
+
+int a()
+{
+	return 1;
+}
+
+int b()
+{
+	return a();
+}
+
+And you multiply b() 10 times, you will have 10 calls to a(), so selecting a -max-redirect=50% will be at most 5 redirections for a() calls. An absolute value for -max-redirect is also considered per callee-name basis instead of the whole program.
+
+Finally the program outputs to the standard output a log with all modifications made to the source since they are random. The first line is list of all parameters passed to the program, for example:
+
+!options,100,60,100,2635412,8756720,*
+
+Here !options is the identifier of the line and the following parameters are, in order: -max-select, -max-redirect, -max-repeat, -srseed, -reseed and an unused pattern parameter that is defaulted to *. Theoretically if Crowbar is given the same source file and parameters then the outcome should be the same.
+
+The next sequence of lines will be pairs of method-name,number-of-repetitions, only for the methods selected to be repeated. Finally triplets of method-name,character-range,redirect-index for the redirected calls. The range is a string in the format begin-end with the absolute character position of the call inside the source file and the redirect-index is the number of the redirection selected, for example a 2 time repetition of a would result in:
+
+a()
+r1_a()
+r2_a()
+
+So a line:
+
+a,15-16,2 
+
+Means that the call a() that starts at position 15 and ends at position 16 (identifier only) was redirected to r2_a().
+
+Further inquires for documentation / bug-fixes should be sent to caianbene@gmail.com with the [Crowbar] tag (srsly, pls use a tag).
